@@ -9,11 +9,21 @@
       "bot_name": "Registre des voyageurs",
       "mention": "",
       "announce_existing": true,
-      "skip_ids": [],
+      "skip_ids": [
+        51,
+        52,
+        54
+      ],
       "existing_label": "Fiche du registre à (re)découvrir",
       "existing_message": "Cette fiche est déjà dans le {name}, pour celles et ceux qui l'auraient manquée !",
       "title_class": "tr-title",
-      "container_class": "tr-list"
+      "container_class": "tr-list",
+      "exclude_classes": [
+        "tc-grid",
+        "folder_announce",
+        "folder_sticky",
+        "folder_global"
+      ]
     }
   ]
 }
