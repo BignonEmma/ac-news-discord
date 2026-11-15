@@ -15,7 +15,7 @@
         54
       ],
       "existing_label": "Fiche du registre à (re)découvrir",
-      "existing_message": "Cette fiche est déjà dans le {name}, pour celles et ceux qui l'auraient manquée !",
+      "existing_message": "Cette fiche est déjà dans le {name}, pour celleux qui l'auraient manquée !",
       "title_class": "tr-title",
       "container_class": "tr-list",
       "exclude_classes": [
