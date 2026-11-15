@@ -9,14 +9,11 @@
       "bot_name": "Registre des voyageurs",
       "mention": "",
       "announce_existing": true,
-      "skip_ids": [
-        51,
-        52,
-        54,
-        147
-      ],
-      "existing_label": "Fiche de présentation à (re)découvrir",
-      "existing_message": "Cette fiche est déjà dans le {name}, pour celles et ceux qui l'auraient manquée !"
+      "skip_ids": [],
+      "existing_label": "Fiche du registre à (re)découvrir",
+      "existing_message": "Cette fiche est déjà dans le {name}, pour celles et ceux qui l'auraient manquée !",
+      "title_class": "tr-title",
+      "container_class": "tr-list"
     }
   ]
 }
