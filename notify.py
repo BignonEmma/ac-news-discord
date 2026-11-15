@@ -12,34 +12,63 @@ UA = "Mozilla/5.0 (compatible; AstraeliaNotifier/1.0)"
 TOPIC_HREF = re.compile(r"^(?:https?://[^/]+)?/t(\d+)-([^/?#]*)(?:[?#].*)?$")
 
 
+VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+
+
+def _ident(tag, attrs):
+    a = dict(attrs)
+    out = tag
+    if a.get("id"):
+        out += "#" + a["id"]
+    if a.get("class"):
+        out += "." + ".".join(a["class"].split()[:3])
+    return out
+
+
 class TopicParser(HTMLParser):
     """Récupère les liens de sujets (/t123-titre) avec leur texte.
-    in_list = True si au moins un lien de ce sujet porte la classe topictitle
-    (= vraie liste des sujets, pas les encarts 'derniers sujets' de la page)."""
+    in_list = True si le lien porte la classe title_class ET se trouve dans un bloc container_class.
+    self.links garde aussi l'environnement de chaque lien, pour le diagnostic."""
 
-    def __init__(self):
+    def __init__(self, title_class="tr-title", container_class="tr-list"):
         super().__init__()
-        self.topics = {}  # id -> {"slug","title","in_list"}
+        self.title_class = title_class
+        self.container_class = container_class
+        self.topics = {}
+        self.links = []
+        self.stack = []
         self._cur = None
 
     def handle_starttag(self, tag, attrs):
-        if tag != "a":
-            return
         a = dict(attrs)
-        m = TOPIC_HREF.match(a.get("href") or "")
-        if m:
-            self._cur = {"id": m.group(1), "slug": m.group(2),
-                         "is_title": "topictitle" in (a.get("class") or ""), "text": ""}
+        if tag == "a":
+            m = TOPIC_HREF.match(a.get("href") or "")
+            if m:
+                in_box = (not self.container_class) or any(self.container_class in x[2] for x in self.stack)
+                is_title = (not self.title_class or self.title_class in (a.get("class") or "").split()) and in_box
+                self._cur = {"id": m.group(1), "slug": m.group(2),
+                             "cls": a.get("class") or "",
+                             "is_title": is_title, "text": "",
+                             "anc": " > ".join(x[1] for x in self.stack[-6:])}
+        if tag not in VOID:
+            self.stack.append((tag, _ident(tag, attrs), (dict(attrs).get("class") or "").split()))
 
     def handle_data(self, data):
         if self._cur is not None:
             self._cur["text"] += data
 
     def handle_endtag(self, tag):
+        if tag in VOID:
+            return
+        for i in range(len(self.stack) - 1, -1, -1):
+            if self.stack[i][0] == tag:
+                del self.stack[i:]
+                break
         if tag != "a" or self._cur is None:
             return
         c, self._cur = self._cur, None
         text = " ".join(c["text"].split())
+        self.links.append({"id": c["id"], "cls": c["cls"], "anc": c["anc"], "text": text})
         t = self.topics.setdefault(c["id"], {"slug": c["slug"], "title": "", "in_list": False, "title_is_main": False})
         if c["is_title"]:
             t["in_list"] = True
@@ -54,14 +83,19 @@ def fetch(url):
         return r.read().decode("utf-8", errors="replace")
 
 
-def get_topics(url):
+def get_topics(url, forum=None):
+    forum = forum or {}
     html = fetch(url) if not os.environ.get("HTML_FILE") else open(os.environ["HTML_FILE"], encoding="utf-8").read()
-    p = TopicParser()
+    p = TopicParser(forum.get("title_class", "tr-title"), forum.get("container_class", "tr-list"))
     p.feed(html)
     in_list = {i: t for i, t in p.topics.items() if t["in_list"]}
     print("Liens de sujets trouvés sur la page: %d, dont %d dans la vraie liste." % (len(p.topics), len(in_list)))
     if not in_list:
-        raise RuntimeError("aucun titre de sujet reconnu (classe topictitle absente): la page a changé ou n'est pas celle attendue")
+        print("--- DIAGNOSTIC: un lien par ligne (numéro | classe du lien | environnement dans la page | texte) ---")
+        for l in p.links:
+            print("t%s | a.%s | %s | %s" % (l["id"], l["cls"] or "-", l["anc"], l["text"][:40]))
+        print("--- FIN DIAGNOSTIC ---")
+        raise RuntimeError("aucun sujet reconnu (lien de classe %s dans un bloc %s): la page a changé ou n'est pas celle attendue" % (p.title_class, p.container_class))
     out = {}
     for tid, t in in_list.items():
         title = t["title"] or unquote(t["slug"]).replace("-", " ").strip().capitalize()
@@ -111,7 +145,7 @@ def main():
         if not webhook and not DRY_RUN:
             print("Secret manquant: %s" % forum["webhook_secret"]); failed = True; continue
         try:
-            topics = get_topics(forum["url"])
+            topics = get_topics(forum["url"], forum)
         except Exception as e:
             print("Lecture impossible pour %s: %s" % (key, e)); failed = True; continue
         if not topics:
