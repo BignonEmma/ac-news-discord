@@ -8,7 +8,7 @@
       "message": "Une nouvelle fiche vient d'être postée dans le {name} !",
       "bot_name": "Registre des voyageurs",
       "mention": "",
-      "announce_existing": true,
+      "announce_existing": false,
       "skip_ids": [
         51,
         52,
@@ -24,6 +24,22 @@
         "folder_sticky",
         "folder_global"
       ]
+    }
+  ],
+  "topics": [
+    {
+      "name": "01. Recherche de liens & RPs",
+      "url": "https://astraeliachronicles.forumactif.com/t72-01-recherche-liens-rps",
+      "webhook_secret": "DISCORD_WEBHOOK_RPS",
+      "label": "Nouvelle recherche",
+      "bot_name": "Recherche de liens & RPs"
+    },
+    {
+      "name": "02. RPs libres",
+      "url": "https://astraeliachronicles.forumactif.com/t77-02-rps-libres",
+      "webhook_secret": "DISCORD_WEBHOOK_RPS",
+      "label": "Nouvelle recherche",
+      "bot_name": "RPs libres"
     }
   ]
 }
