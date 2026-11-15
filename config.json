@@ -4,10 +4,19 @@
       "name": "Registre des voyageurs",
       "url": "https://astraeliachronicles.forumactif.com/f14-registre-des-voyageurs",
       "webhook_secret": "DISCORD_WEBHOOK_FICHES",
-      "label": "Nouvelle fiche personnage",
+      "label": "Nouvelle fiche de présentation",
       "message": "Une nouvelle fiche vient d'être postée dans le {name} !",
       "bot_name": "Registre des voyageurs",
-      "mention": ""
+      "mention": "",
+      "announce_existing": true,
+      "skip_ids": [
+        51,
+        52,
+        54,
+        147
+      ],
+      "existing_label": "Fiche de présentation à (re)découvrir",
+      "existing_message": "Cette fiche est déjà dans le {name}, pour celles et ceux qui l'auraient manquée !"
     }
   ]
 }
