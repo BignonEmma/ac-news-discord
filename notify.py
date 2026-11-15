@@ -13,11 +13,13 @@ TOPIC_HREF = re.compile(r"^(?:https?://[^/]+)?/t(\d+)-([^/?#]*)(?:[?#].*)?$")
 
 
 class TopicParser(HTMLParser):
-    """Récupère les liens de sujets (/t123-titre) avec leur texte."""
+    """Récupère les liens de sujets (/t123-titre) avec leur texte.
+    in_list = True si au moins un lien de ce sujet porte la classe topictitle
+    (= vraie liste des sujets, pas les encarts 'derniers sujets' de la page)."""
 
     def __init__(self):
         super().__init__()
-        self.topics = {}  # id -> {"slug":..., "title":..., "is_title":bool}
+        self.topics = {}  # id -> {"slug","title","in_list"}
         self._cur = None
 
     def handle_starttag(self, tag, attrs):
@@ -26,13 +28,8 @@ class TopicParser(HTMLParser):
         a = dict(attrs)
         m = TOPIC_HREF.match(a.get("href") or "")
         if m:
-            self._cur = {
-                "id": m.group(1),
-                "slug": m.group(2),
-                "href": a["href"],
-                "is_title": "topictitle" in (a.get("class") or ""),
-                "text": "",
-            }
+            self._cur = {"id": m.group(1), "slug": m.group(2),
+                         "is_title": "topictitle" in (a.get("class") or ""), "text": ""}
 
     def handle_data(self, data):
         if self._cur is not None:
@@ -43,10 +40,12 @@ class TopicParser(HTMLParser):
             return
         c, self._cur = self._cur, None
         text = " ".join(c["text"].split())
-        t = self.topics.setdefault(c["id"], {"slug": c["slug"], "href": c["href"], "title": "", "is_title": False})
-        # on préfère le lien portant la classe topictitle, sinon le premier texte non vide
-        if text and (c["is_title"] and not t["is_title"] or not t["title"]):
-            t["title"], t["is_title"], t["href"] = text, c["is_title"], c["href"]
+        t = self.topics.setdefault(c["id"], {"slug": c["slug"], "title": "", "in_list": False, "title_is_main": False})
+        if c["is_title"]:
+            t["in_list"] = True
+        if text and (c["is_title"] and not t["title_is_main"] or not t["title"]):
+            t["title"] = text
+            t["title_is_main"] = t["title_is_main"] or c["is_title"]
 
 
 def fetch(url):
@@ -59,15 +58,20 @@ def get_topics(url):
     html = fetch(url) if not os.environ.get("HTML_FILE") else open(os.environ["HTML_FILE"], encoding="utf-8").read()
     p = TopicParser()
     p.feed(html)
+    in_list = {i: t for i, t in p.topics.items() if t["in_list"]}
+    print("Liens de sujets trouvés sur la page: %d, dont %d dans la vraie liste." % (len(p.topics), len(in_list)))
+    if not in_list:
+        raise RuntimeError("aucun titre de sujet reconnu (classe topictitle absente): la page a changé ou n'est pas celle attendue")
     out = {}
-    for tid, t in p.topics.items():
+    for tid, t in in_list.items():
         title = t["title"] or unquote(t["slug"]).replace("-", " ").strip().capitalize()
         out[tid] = {"title": title, "url": urljoin(url, "/t%s-%s" % (tid, t["slug"]))}
     return out
 
 
-def send_discord(webhook, forum, topic):
-    msg = forum.get("message", "Un nouveau sujet vient d'être posté !").format(name=forum["name"])
+def send_discord(webhook, forum, topic, existing=False):
+    key_msg, key_label = ("existing_message", "existing_label") if existing else ("message", "label")
+    msg = forum.get(key_msg, forum.get("message", "Un nouveau sujet vient d'être posté !")).format(name=forum["name"])
     payload = {
         "username": forum.get("bot_name", "Astraelia"),
         "content": forum.get("mention", ""),
@@ -76,7 +80,7 @@ def send_discord(webhook, forum, topic):
             "url": topic["url"],
             "description": msg,
             "color": forum.get("color", 0x7B5EA7),
-            "author": {"name": forum.get("label", "Nouveau sujet")},
+            "author": {"name": forum.get(key_label, forum.get("label", "Nouveau sujet"))},
         }],
     }
     if DRY_RUN:
@@ -114,16 +118,25 @@ def main():
             print("Aucun sujet trouvé sur %s, la page a peut-être changé. État inchangé." % key)
             failed = True; continue
 
+        print("Sujets lus: " + ", ".join(sorted(topics, key=int)))
+        skip = set(str(i) for i in forum.get("skip_ids", []))
+        topics = {i: t for i, t in topics.items() if i not in skip}
         seen = set(state.get(key, []))
+        existing_run = False
         if key not in state:
-            print("Première exécution pour %s: %d sujets enregistrés sans annonce." % (forum["name"], len(topics)))
-            state[key] = sorted(topics, key=int)
-            continue
+            if forum.get("announce_existing"):
+                print("Première exécution pour %s: annonce des %d sujets déjà présents." % (forum["name"], len(topics)))
+                seen = set()
+                existing_run = True
+            else:
+                print("Première exécution pour %s: %d sujets enregistrés sans annonce." % (forum["name"], len(topics)))
+                state[key] = sorted(topics, key=int)
+                continue
 
         new_ids = sorted((i for i in topics if i not in seen), key=int)
         for tid in new_ids:
             try:
-                send_discord(webhook, forum, topics[tid])
+                send_discord(webhook, forum, topics[tid], existing_run)
                 seen.add(tid)
                 print("Annoncé: %s" % topics[tid]["title"])
                 time.sleep(1)
