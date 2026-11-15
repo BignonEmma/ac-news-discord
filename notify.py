@@ -30,10 +30,11 @@ class TopicParser(HTMLParser):
     in_list = True si le lien porte la classe title_class ET se trouve dans un bloc container_class.
     self.links garde aussi l'environnement de chaque lien, pour le diagnostic."""
 
-    def __init__(self, title_class="tr-title", container_class="tr-list"):
+    def __init__(self, title_class="tr-title", container_class="tr-list", exclude_classes=()):
         super().__init__()
         self.title_class = title_class
         self.container_class = container_class
+        self.exclude = set(exclude_classes)
         self.topics = {}
         self.links = []
         self.stack = []
@@ -45,7 +46,8 @@ class TopicParser(HTMLParser):
             m = TOPIC_HREF.match(a.get("href") or "")
             if m:
                 in_box = (not self.container_class) or any(self.container_class in x[2] for x in self.stack)
-                is_title = (not self.title_class or self.title_class in (a.get("class") or "").split()) and in_box
+                excluded = any(self.exclude & set(x[2]) for x in self.stack)
+                is_title = (not self.title_class or self.title_class in (a.get("class") or "").split()) and in_box and not excluded
                 self._cur = {"id": m.group(1), "slug": m.group(2),
                              "cls": a.get("class") or "",
                              "is_title": is_title, "text": "",
@@ -86,7 +88,8 @@ def fetch(url):
 def get_topics(url, forum=None):
     forum = forum or {}
     html = fetch(url) if not os.environ.get("HTML_FILE") else open(os.environ["HTML_FILE"], encoding="utf-8").read()
-    p = TopicParser(forum.get("title_class", "tr-title"), forum.get("container_class", "tr-list"))
+    p = TopicParser(forum.get("title_class", "tr-title"), forum.get("container_class", "tr-list"),
+                    forum.get("exclude_classes", ["tc-grid", "folder_announce", "folder_sticky", "folder_global"]))
     p.feed(html)
     in_list = {i: t for i, t in p.topics.items() if t["in_list"]}
     print("Liens de sujets trouvés sur la page: %d, dont %d dans la vraie liste." % (len(p.topics), len(in_list)))
